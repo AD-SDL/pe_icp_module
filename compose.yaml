@@ -1,23 +1,23 @@
-name: python_template_module
+name: pe_icp_module
 services:
-  python_template_module:
-    container_name: python_template_module
-    image: ghcr.io/ad-sdl/python_template_module
+  pe_icp_module:
+    container_name: pe_icp_module
+    image: ghcr.io/ad-sdl/pe_icp_module
     build:
       context: .
       tags:
-        - ghcr.io/ad-sdl/python_template_module:latest
-        - ghcr.io/ad-sdl/python_template_module:dev
+        - ghcr.io/ad-sdl/pe_icp_module:latest
+        - ghcr.io/ad-sdl/pe_icp_module:dev
     volumes:
-      - ./src:/home/app/python_template_module/src
-      - ./tests:/home/app/python_template_module/tests
-    command: python -m python_template_module --port 2000
+      - ./src:/home/app/pe_icp_module/src
+      - ./tests:/home/app/pe_icp_module/tests
+    command: python -m pe_icp_module --port 2000
     ports:
       - 2000:2000
 #####################
 # WEI Core Services #
 #####################
-  python_template_wei_server:
+  pe_icp_wei_server:
     image: ghcr.io/ad-sdl/wei
     container_name: wei_server
     ports:
@@ -32,7 +32,7 @@ services:
     depends_on:
       - wei_redis
     profiles: [wei]
-  python_template_wei_engine:
+  pe_icp_wei_engine:
     image: ghcr.io/ad-sdl/wei
     container_name: wei_engine
     volumes:
@@ -46,7 +46,7 @@ services:
       - wei_redis
       - wei_server
     profiles: [wei]
-  python_template_wei_redis:
+  pe_icp_wei_redis:
     image: redis
     container_name: wei_redis
     ports:

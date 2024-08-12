@@ -1,4 +1,4 @@
-"""Driver for interfacing with the python_template device/instrument/robot."""
+"""Driver for interfacing with the pe_icp device/instrument/robot."""
 
 from pathlib import Path
 

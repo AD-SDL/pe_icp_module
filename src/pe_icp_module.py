@@ -5,7 +5,7 @@ REST-based node that interfaces with WEI and provides a simple Sleep(t) function
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
-import python_template_driver as driver
+import pe_icp_driver as driver
 from fastapi.datastructures import UploadFile
 from starlette.datastructures import State
 from typing_extensions import Annotated
@@ -20,7 +20,7 @@ from wei.types.step_types import (
 from wei.utils import extract_version
 
 rest_module = RESTModule(
-    name="python_template_module",
+    name="pe_icp_module",
     version=extract_version(Path(__file__).parent.parent / "pyproject.toml"),
     description="TODO: Provide a description of your module here.",
     model="TODO: specify the device model this module controls",
@@ -101,8 +101,8 @@ def add(
 
     Example workflow step yaml:
 
-    - name: Add on python_template
-      module: python_template
+    - name: Add on pe_icp
+      module: pe_icp
       action: add
       args:
         a: 5
@@ -127,8 +127,8 @@ def subtract(
 
     Example workflow step yaml:
 
-    - name: Subtract on python_template
-      module: python_template
+    - name: Subtract on pe_icp
+      module: pe_icp
       action: subtract
       args:
         a: 12
@@ -155,8 +155,8 @@ def run_protocol(
 
     Example workflow step yaml:
 
-    - name: Run protocol on python_template
-      module: python_template
+    - name: Run protocol on pe_icp
+      module: pe_icp
       action: run_protocol
       files:
         protocol: path/to/protocol/file

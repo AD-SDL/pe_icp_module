@@ -1,5 +1,5 @@
 [project]
-name = "python_template_module"
+name = "pe_icp_module"
 version = "0.0.0"
 description = "A simple example module that implements a sleep(t) function"
 authors = [{name = "Ryan D. Lewis", email="ryan.lewis@anl.gov"}]
@@ -15,7 +15,7 @@ readme = "README.md"
 license = {text = "MIT"}
 
 [project.urls]
-homepage = "https://github.com/AD-SDL/python_template_module"
+homepage = "https://github.com/AD-SDL/pe_icp_module"
 
 #####################
 # Development Tools #
