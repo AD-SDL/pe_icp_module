@@ -1,0 +1,13 @@
+name: Pytest Unit Tests
+
+on: [push]
+
+jobs:
+  build_and_test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+        name: Checkout code
+      - name: Initialize, Build, and Test with Docker
+        run: make test
+        shell: bash
