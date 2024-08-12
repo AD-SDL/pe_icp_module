@@ -12,6 +12,7 @@ replace_string=$2
 # Replace string in filenames
 git ls-files | grep "$search_string" | while read -r file; do
   new_file=$(echo "$file" | sed "s/$search_string/$replace_string/g")
+  mkdir -p $(dirname $new_file)
   git mv "$file" "$new_file"
 done
 
