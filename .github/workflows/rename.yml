@@ -15,7 +15,7 @@ jobs:
                 ref: ${{ github.head_ref }}
 
             - run: |
-                replacement_string="$(echo '${{ github.repository }}' | awk -F '/' '{print $2}' | tr '-' '_' | tr '[:upper:]' '[:lower:])"
+                replacement_string="$(echo '${{ github.repository }}' | awk -F '/' '{print $2}' | tr '-' '_' | tr '[:upper:]' '[:lower:]')"
                 replacement_string="${replacement_string%_module}"
                 .github/rename.sh python_template "$replacement_string"
 
