@@ -1,7 +1,7 @@
 name: Create New Module Repo
 
 # Only run when the new module is created
-on: create
+on: [create, workflow_dispatch]
 
 jobs:
     rename:
