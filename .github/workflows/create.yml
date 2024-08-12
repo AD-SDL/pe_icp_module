@@ -5,7 +5,6 @@ on: [create, workflow_dispatch]
 
 jobs:
     rename:
-        if: github.ref == 'refs/heads/main'
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v3
@@ -24,3 +23,4 @@ jobs:
               with:
                 commit_message: "Renamed module"
                 push_options: --force
+                file_pattern: . :!.github # Don't modify the workflow
