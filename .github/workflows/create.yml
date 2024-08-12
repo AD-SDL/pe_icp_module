@@ -15,9 +15,6 @@ jobs:
                 fetch-depth: 0
                 ref: ${{ github.head_ref }}
 
-            - run: echo "$(echo '${{ github.repository }}' | awk -F '/' '{print $2}' | tr '-' '_')" >> $GITHUB_ENV
-              shell: bash
-
             - run: echo "REPOSITORY_OWNER=$(echo '${{ github.repository }}' | awk -F '/' '{print $1}')" >> $GITHUB_ENV
               shell: bash
 
