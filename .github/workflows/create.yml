@@ -20,5 +20,7 @@ jobs:
                 replacement_string="${replacement_string%_module}"
                 .github/rename.sh python_template "$replacement_string"
 
-            - name: Git Commit/Push Changes
-              uses: actions-x/commit@v6
+            - uses: stefanzweifel/git-auto-commit-action@v4
+              with:
+                commit_message: "Renamed module"
+                push_options: --force
