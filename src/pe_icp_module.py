@@ -3,80 +3,76 @@ REST-based node that interfaces with WEI and provides a simple Sleep(t) function
 """
 
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 
-import pe_icp_driver as driver
-from fastapi.datastructures import UploadFile
+from pe_icp_interface import ICPInterface
 from starlette.datastructures import State
-from typing_extensions import Annotated
 from wei.modules.rest_module import RESTModule
-from wei.types.module_types import ModuleAction, ModuleActionArg, ModuleState
-from wei.types.step_types import (
-    ActionRequest,
-    StepFileResponse,
-    StepResponse,
-    StepStatus,
-)
+from wei.types.module_types import ModuleState
+from wei.types.step_types import StepResponse
 from wei.utils import extract_version
 
-rest_module = RESTModule(
+pe_icp_module = RESTModule(
     name="pe_icp_module",
     version=extract_version(Path(__file__).parent.parent / "pyproject.toml"),
-    description="TODO: Provide a description of your module here.",
-    model="TODO: specify the device model this module controls",
+    description="Controls a PerkinElmer Syngistix ICP (such as the Avio 550 Max).",
+    model="PerkinElmer Avio 550 Max",
 )
+pe_icp_module.arg_parser.add_argument(
+    "--server_ip",
+    type=str,
+    default="192.168.4.32",  # TODO: Generalize this
+)
+pe_icp_module.arg_parser.add_argument("--client_ip", type=str, default="192.168.4.32")
+
 
 # ***********#
 # *Lifecycle*#
 # ***********#
-
-# TODO: Define any custom functionality needed to handle the startup, shutdown, and state of the device
-# * All of these functions are optional, and can be removed if not needed
-
-
-@rest_module.startup()
+@pe_icp_module.startup()
 def custom_startup_handler(state: State):
     """
-    Custom startup handler that is called whenever the module is started.
-
-    If this isn't provided, the default startup handler will be used, which will do nothing.
+    Open the connection to the ICP Interface when the module is started
     """
-    state.sum = 0
-    state.difference = 0
-
-    # driver.initialize()  # *Initialize the device, if needed
+    state.icp_interface = None
+    state.icp_interface = ICPInterface(state.server_ip, state.client_ip, state.name)
 
 
-@rest_module.shutdown()
+@pe_icp_module.shutdown()
 def custom_shutdown_handler(state: State):
     """
-    Custom shutdown handler that is called whenever the module is shutdown.
-
-    If this isn't provided, the default shutdown handler will be used, which will do nothing.
+    Close the connection to Syngistix ICP when the module is shut down
     """
 
-    # driver.disconnect()  # *Close device connection or do other cleanup, if needed
+    del state.icp_interface
 
 
-@rest_module.state_handler()
+@pe_icp_module.state_handler()
 def custom_state_handler(state: State) -> ModuleState:
     """
-    Custom state handler that is called whenever the modules state is requested via the REST API.
-
-    If this isn't provided, the default state handler will be used, which will return the following:
-
-    ModuleState(status=state.status, error=state.error)
+    Returns the module's status, along with information about the state of the instrument
     """
 
-    # driver.query_state(state)  # *Query the state of the device, if supported
+    # interface.query_state(state)  # *Query the state of the device, if supported
+    if state.icp_interface is not None:
+        state.icp_interface.syn_client.GetPlasmaStatus()
+        state.icp_interface.syn_client.GetInstrumentStatus()
+        state.icp_interface.syn_client.GetAnalysisStatus()
+        return ModuleState.model_validate(
+            {
+                "status": state.status,  # *Required
+                "error": state.error,
+                "instrument_status": state.icp_interface.instrument_status,
+                "plasma_status": state.icp_interface.plasma_status,
+                "analysis_status": state.icp_interface.analysis_status,
+                "autosampler_status": state.icp_interface.autosampler_status,
+                "connection_status": state.icp_interface.connection_status,
+            }
+        )
 
     return ModuleState.model_validate(
         {
             "status": state.status,  # *Required
             "error": state.error,
-            # *Custom state fields
-            "sum": state.sum,
-            "difference": state.difference,
         }
     )
 
@@ -85,118 +81,46 @@ def custom_state_handler(state: State) -> ModuleState:
 # Actions #
 ###########
 
-# TODO: Define functions to handle each action the device should be able to perform
-
-
-@rest_module.action(
-    name="add", description="An example action that adds two numbers together."
-)
-def add(
-    a: Annotated[float, "First number to add"],
-    b: Annotated[float, "Second number to add"],
-    state: State,  # *This is an optional argument that can be used to access the current state of the module
-) -> StepResponse:
+@pe_icp_module.action("plasma_on")
+def plasma_on(state: State) -> StepResponse:
     """
-    Add two numbers together
-
-    Example workflow step yaml:
-
-    - name: Add on pe_icp
-      module: pe_icp
-      action: add
-      args:
-        a: 5
-        b: 7
+    Turn on the plasma
     """
+    state.icp_interface.syn_client.PlasmaOn()
+    return StepResponse.step_succeeded(state.icp_interface.syn_client.Response())
 
-    state.sum = a + b
-
-    return StepResponse.step_succeeded(state.sum)
-
-
-# * If you don't specify a name or description, the function name and docstring will be used
-@rest_module.action()
-def subtract(
-    a: Annotated[float, "First number to subtract from"],
-    b: Annotated[float, "Second number to subtract"],
-    action: ActionRequest,  # *This is an optional argument that can be used to access the entire action request
-    state: State,  # *This is an optional argument that can be used to access the current state of the module
-) -> StepResponse:
+@pe_icp_module.action("plasma_off")
+def plasma_off(state: State) -> StepResponse:
     """
-    Subtract two numbers
-
-    Example workflow step yaml:
-
-    - name: Subtract on pe_icp
-      module: pe_icp
-      action: subtract
-      args:
-        a: 12
-        b: 10
+    Turn off the plasma
     """
+    state.icp_interface.syn_client.PlasmaOff()
+    return StepResponse.step_succeeded(state.icp_interface.syn_client.Response())
 
-    # state.difference = a - b
-    state.difference = (
-        action.args["a"] - action.args["b"]
-    )  # *This is equivalent to the above
-    state.difference -= action.args.get(
-        "c", 0
-    )  # * You can also use get to provide a default value
-
-    return StepResponse.step_succeeded(state.difference)
-
-
-@rest_module.action(name="run_protocol", description="Run a protocol file")
-def run_protocol(
-    protocol: Annotated[UploadFile, "Protocol file to run"],
-) -> StepFileResponse:
+@pe_icp_module.action("move_autosampler")
+def move_autosampler(state: State, location: int) -> StepResponse:
     """
-    Run a protocol file
-
-    Example workflow step yaml:
-
-    - name: Run protocol on pe_icp
-      module: pe_icp
-      action: run_protocol
-      files:
-        protocol: path/to/protocol/file
+    Move the autosampler to a specific position
     """
-    # *Save the protocol file to a temporary location
-    with NamedTemporaryFile() as f:
-        f.write(protocol.file.read())
-        f.seek(0)
+    state.icp_interface.syn_client.MoveAutosampler(location)
+    return StepResponse.step_succeeded(state.icp_interface.syn_client.Response())
 
-        # *Run protocol file
-        driver.run_protocol(Path(f.name))
-
-    output_file = Path("path/to/output/file")
-
-    return StepFileResponse(
-        status=StepStatus.SUCCEEDED,
-        path=output_file,
-    )
-
-
-# * If you don't want to/can't use the decorator, you can also add actions like this:
-def print(output: str) -> StepResponse:
+@pe_icp_module.action("stop_analysis")
+def stop_analysis(state: State) -> StepResponse:
     """
-    Print a message
+    Stop the analysis
     """
-    print(output)
-    return StepResponse.step_succeeded()
+    state.icp_interface.syn_client.StopAnalysis()
+    return StepResponse.step_succeeded(state.icp_interface.syn_client.Response())
 
-
-rest_module.actions.append(
-    ModuleAction(
-        name="print",
-        description="A simple print action",
-        function=print,
-        args=[
-            ModuleActionArg(name="output", type="str", description="Message to print")
-        ],
-    )
-)
-
+@pe_icp_module.cancel()
+@pe_icp_module.pause()
+@pe_icp_module.safety_stop()
+def cancel(state: State) -> StepResponse:
+    """
+    Cancel the current action
+    """
+    state.icp_interface.syn_client.StopAnalysis()
 
 if __name__ == "__main__":
-    rest_module.start()
+    pe_icp_module.start()
