@@ -9,23 +9,6 @@ import time
 import clr
 from typing_extensions import Self
 
-sys.path.append(
-    r"""C:\Program Files (x86)\PerkinElmer\Syngistix-ICP\SyngistixRemoteControl"""
-)
-clr.AddReference("RemoteSyngsitix")
-from RemoteSyngistix import (
-    AnalysisSampleCallback,
-    AnalysisStatusCallback,
-    AutosamplerStatusCallback,
-    ConnectionStatusCallback,
-    ErrorCallback,
-    InstrumentStatus,
-    InstrumentStatusCallback,
-    PlasmaStatusCallback,
-    StatusCallback,
-    SyngistixInterface,
-)
-
 
 class ICPInterface:
     """Interface for controlling a Perkins Elmer Syngistix ICP."""
@@ -39,29 +22,45 @@ class ICPInterface:
     instrument_error = {}
     connection_status = None
 
-    def __init__(self, server_ip: str, client_ip: str, name: str) -> Self:
+    def __init__(
+        self,
+        server_ip: str,
+        client_ip: str,
+        name: str,
+        dll_path: str = r"""C:\Program Files (x86)\PerkinElmer\Syngistix-ICP\SyngistixRemoteControl""",
+    ) -> Self:
         """Initialize the ICP interface"""
-        self.syn_client = SyngistixInterface()
-        self.syn_client.connectionStatusCallback = ConnectionStatusCallback(
-            self.connection_status_callback
+
+        sys.path.append(dll_path)
+        clr.AddReference("RemoteSyngsitix")
+        import RemoteSyngistix
+
+        self.RemoteSyngistix = RemoteSyngistix
+        self.syn_client = RemoteSyngistix.SyngistixInterface()
+        self.syn_client.connectionStatusCallback = (
+            RemoteSyngistix.ConnectionStatusCallback(self.connection_status_callback)
         )
-        self.syn_client.statusCallback = StatusCallback(self.status_callback)
-        self.syn_client.plasmaStatusCallback = PlasmaStatusCallback(
+        self.syn_client.statusCallback = RemoteSyngistix.StatusCallback(
+            self.status_callback
+        )
+        self.syn_client.plasmaStatusCallback = RemoteSyngistix.PlasmaStatusCallback(
             self.plasma_status_callback
         )
-        self.syn_client.analysisStatusCallback = AnalysisStatusCallback(
+        self.syn_client.analysisStatusCallback = RemoteSyngistix.AnalysisStatusCallback(
             self.analysis_status_callback
         )
-        self.syn_client.analysisSampleCallback = AnalysisSampleCallback(
+        self.syn_client.analysisSampleCallback = RemoteSyngistix.AnalysisSampleCallback(
             self.analysis_sample_callback
         )
-        self.syn_client.instrumentStatusCallback = InstrumentStatusCallback(
-            self.instrument_status_callback
+        self.syn_client.instrumentStatusCallback = (
+            RemoteSyngistix.InstrumentStatusCallback(self.instrument_status_callback)
         )
-        self.syn_client.autosamplerStatusCallback = AutosamplerStatusCallback(
-            self.autosampler_status_callback
+        self.syn_client.autosamplerStatusCallback = (
+            RemoteSyngistix.AutosamplerStatusCallback(self.autosampler_status_callback)
         )
-        self.syn_client.errorCallback = ErrorCallback(self.error_callback)
+        self.syn_client.errorCallback = RemoteSyngistix.ErrorCallback(
+            self.error_callback
+        )
         print(
             "Connected: ",
             self.syn_client.Connect(clientIP=client_ip, serverIP=server_ip, name=name),
@@ -81,6 +80,7 @@ class ICPInterface:
 
     def analysis_status_callback(self, status: int):
         """Callback function for analysis status"""
+
         if status == 1:
             self.analysis_status = f"{status}: Analysis Running"
         elif status == 2:
@@ -109,16 +109,48 @@ class ICPInterface:
 
     def instrument_status_callback(self, status: int):
         """Callback function for instrument status"""
-        self.instrument_status = f"{status}: {InstrumentStatus(status).ToString()}"
+        self.instrument_status = (
+            f"{status}: {self.RemoteSyngistix.InstrumentStatus(status).ToString()}"
+        )
 
     def autosampler_status_callback(self, status: int):
         """Callback function for autosampler status"""
-        self.autosampler_status = f"{status}: {InstrumentStatus(status).ToString()}"
+        self.autosampler_status = (
+            f"{status}: {self.RemoteSyngistix.InstrumentStatus(status).ToString()}"
+        )
 
     def connection_status_callback(self, status: int):
         """Callback function for connection status"""
         self.connection_status = status == 1
 
+    def start_auto_analysis(
+        self,
+        method_name: str,
+        dataset_name: str,
+        sample_info_name: str,
+        export_template_name: str,
+        wavelength_realign: int,
+        precalibrate: bool = False,
+        use_active_method: bool = False,
+    ):
+        """Start an auto analysis"""
+        if precalibrate:
+            self.syn_client.AutoAnalyzeAll(
+                methodName=method_name,
+                dataSetName=dataset_name,
+                sampleInfoName=sample_info_name,
+                exportTemplateName=export_template_name,
+                wavelenghtRealign=wavelength_realign,
+                methodSource=use_active_method,
+            )
+        else:
+            self.syn_client.AutoAnalyzeSamples(
+                methodName=method_name,
+                dataSetName=dataset_name,
+                sampleInfoName=sample_info_name,
+                exportTemplateName=export_template_name,
+                wavelenghtRealign=wavelength_realign,
+            )
 
 if __name__ == "__main__":
     # * Example usage
