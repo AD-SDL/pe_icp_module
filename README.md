@@ -1,3 +1,3 @@
-# pe_icp_module
+# Perkins Elmer Syngistix ICP Module
 
-A template module, implemented in python, for integrating a device into a WEI workcell
+A WEI-powered module for controlling the PerkinElmer Syngistix ICP, currently tested with the AVIO 550 Max.
