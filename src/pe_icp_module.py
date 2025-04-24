@@ -1,278 +1,140 @@
-"""
-REST-based node that interfaces with WEI and provides a simple Sleep(t) function
-"""
-
-import time
-from pathlib import Path
-from typing import Optional
-
-from starlette.datastructures import State
-from typing_extensions import Annotated
-from wei.modules.rest_module import RESTModule
-from wei.types.module_types import ModuleState
-from wei.types.step_types import StepResponse
-from wei.utils import extract_version
-
+from madsci.common.types.node_types import RestNodeConfig
+from madsci.node_module.rest_node_module import RestNode
 from pe_icp_interface import ICPInterface
+from typing import Optional, Annotated, Any
+from datetime import datetime
+from madsci.node_module.helpers import action
+from madsci.common.types.action_types import ActionFailed, ActionSucceeded, ActionResult, ActionStatus
+from pathlib import Path
+from madsci.common.types.admin_command_types import AdminCommandResponse
 
-pe_icp_module = RESTModule(
-    name="pe_icp_module",
-    version=extract_version(Path(__file__).parent.parent / "pyproject.toml"),
-    description="Controls a PerkinElmer Syngistix ICP (such as the Avio 550 Max).",
-    model="PerkinElmer Avio 550 Max",
-)
-pe_icp_module.arg_parser.add_argument(
-    "--server_ip",
-    type=str,
-    default="192.168.4.32",  # TODO: Generalize this
-)
-pe_icp_module.arg_parser.add_argument("--client_ip", type=str, default="192.168.4.32")
-pe_icp_module.arg_parser.add_argument(
-    "--dll_path",
-    type=str,
-    default=r"""C:\Program Files (x86)\PerkinElmer\Syngistix-ICP\SyngistixRemoteControl""",
-)
+class ICPConfig(RestNodeConfig):
+    """Configuration for a Syngistix ICP Node"""
 
+    dll_path: str = "C:/Program Files (x86)/PerkinElmer/Syngistix-ICP/SyngistixRemoteControl"
+    """The path to the SyngistixRemoteControl .NET DLL"""
+    server_ip: str = "146.139.45.9"
+    """IP Address of the Syngistix Remote Control Server"""
+    client_ip: str = "146.139.45.9"
+    """IP Address of the client machine connecting to the Syngisix Remote Control Server"""
+    file_path: str = "C:/Users/Public/PerkinElmer Syngistix/ICP/Data/Reports"
+    """Path to the ICP's report output folder"""
 
-"""---------"""
-"""Lifecycle"""
-"""---------"""
+class ICPNode(RestNode):
+    """Node Module Implementation for the Perkins Elmer Syngistix ICP Instruments"""
 
+    config_model = ICPConfig
 
-@pe_icp_module.startup()
-def custom_startup_handler(state: State):
-    """
-    Open the connection to the ICP Interface when the module is started
-    """
-    state.icp_interface = None
-    state.icp_interface = ICPInterface(
-        state.server_ip, state.client_ip, state.name, state.dll_path
-    )
+    icp: Optional[ICPInterface] = None
+    """Instance of a PE ICP Interface"""
 
-
-@pe_icp_module.shutdown()
-def custom_shutdown_handler(state: State):
-    """
-    Close the connection to Syngistix ICP when the module is shut down
-    """
-
-    del state.icp_interface
-
-
-@pe_icp_module.state_handler()
-def custom_state_handler(state: State) -> ModuleState:
-    """
-    Returns the module's status, along with information about the state of the instrument
-    """
-
-    # interface.query_state(state)  # *Query the state of the device, if supported
-    if state.icp_interface is not None:
-        state.icp_interface.syn_client.GetPlasmaStatus()
-        state.icp_interface.syn_client.GetInstrumentStatus()
-        print(state.icp_interface.syn_client.GetAnalysisStatus())
-        return ModuleState.model_validate(
-            {
-                "status": state.status,  # *Required
-                "error": state.error,
-                "instrument_status": state.icp_interface.instrument_status,
-                "plasma_status": state.icp_interface.plasma_status,
-                "analysis_status": state.icp_interface.analysis_status,
-                "autosampler_status": state.icp_interface.autosampler_status,
-                "connection_status": state.icp_interface.connection_status,
-                "methods": state.icp_interface.syn_client.GetMethodsList(str()),
-            }
+    def startup_handler(self) -> None:
+        """Connects to the ICP on node startup"""
+        self.icp = ICPInterface(
+            server_ip=self.config.server_ip,
+            client_ip=self.config.client_ip,
+            name=self.node_definition.name,
+            dll_path=self.config.dll_path
         )
+    
+    def shutdown_handler(self) -> None:
+        """Disconnects from the ICP on node shutdown"""
+        del self.icp
 
-    return ModuleState.model_validate(
-        {
-            "status": state.status,  # *Required
-            "error": state.error,
-        }
-    )
+    def state_handler(self) -> None:
+        """Called periodically to update the state published by the node"""
+        if self.icp is not None:
+            if self.node_status.ready:
+                self.icp.syn_client.GetPlasmaStatus()
+                self.icp.syn_client.GetInstrumentStatus()
+                self.icp.syn_client.GetAnalysisStatus()
+                self.node_state = {
+                    "instrument_error": str(self.icp.instrument_error),
+                    "last_updated": str(datetime.now()),
+                    "instrument_status": self.icp.instrument_status,
+                    "plasma_status": self.icp.plasma_status,
+                    "analysis_status": self.icp.analysis_status,
+                    "autosampler_status": self.icp.autosampler_status,
+                    "connection_status": self.icp.connection_status
+                }
 
+    @action
+    def start_auto_analysis_on_container(
+        self,
+        method_name: Annotated[str, "The name of the method to use for the analysis"],
+        container: Annotated[Any, "The sample container to use"],
+        dataset_name: Annotated[str, "The name of the dataset to store results to"],
+        export_template_name: Annotated[str, "The name of the export template file to use for auto-export"],
+        wavelength_realign: Annotated[int,"When to auto realign the wavelength. 0 for never, 1 for the start of analysis, 2 for the start of each method."],
+        precalibrate: Annotated[ bool, "Whether to precalibrate the instrument before starting the analysis" ] = False,
+        use_active_method: Annotated[ bool,  "Whether to use the active method, or load the method specified by 'method_name' (ignored if 'precalibrate' is False)",] = False,
+        wait_for_completion: Annotated[bool, "Whether to wait for the analysis to complete before returning"] = True,
+    ) -> ActionResult:
+        """Start's the ICP's auto analysis process using the specified method name"""
+        icp: ICPInterface = self.icp
+        icp.container = container
+        icp.last_method = method_name
+        icp.last_template = export_template_name
+        icp.unpack_self_container()
+        result = icp.run_analysis() # 0 if incomplete or there is a problem
+        
+        # result code, also icp.status["decision"]
 
-"""--------"""
-""" Actions"""
-"""--------"""
+        # OK to continue
+        # 1 - Normal (Normal termination)
+        # 2 - Incomplete (Incomplete normal run)
+        # 3 - Soft stop (External stop)
 
+        # Do not continue
+        # 0 - No connection (Syngistix cannot be remoted into)
+        # 4 - Socket error (Syngistic crashed during the run)
+        # 5 - Hard stop (Hardware error during the run)
+        # 6 - Hard stop, recovered (hard reload of Syngistix)
+        # 7 - Failed (analysis failed to load)
+        try: # if exist, data needs to be saved regardless of the termination
+            return ActionResult(
+                status=ActionStatus.SUCCEEDED if result in [1, 2, 3] else ActionStatus.FAILED,
+                data={
+                    "result": result, 
+                    "last_id": icp.last_ID
+                },
+                files={
+                    "result_file": Path(self.config.file_path) / f"run_{icp.last_ID}.csv",
+                    "converted_file": Path(self.config.file_path) / f"run_{icp.last_ID}_converted.csv",
+                    "status_file": Path(self.config.file_path) / f"ICP_{icp.last_ID}.json",
+                }
+            )
+        except Exception as e:
+            ActionFailed(errors=e)
 
-@pe_icp_module.action(name="plasma_on")
-def plasma_on(state: State) -> StepResponse:
-    """
-    Turn on the plasma
-    """
-    state.icp_interface.syn_client.PlasmaOn()
-    return StepResponse.step_succeeded(state.icp_interface.syn_client.Response())
+    @action
+    def copy2storage(self, name: Annotated[str, "The name of central data storage to copy results to"],) -> ActionResult:
+        """Copy results for the current container to storage"""
+        return self.icp.copy2exp(name)
 
+    @action(name="Hg_realign")
+    def Hg_realign(self) -> ActionResult:
+        """Realign the mercury bulb"""
+        return self.icp.Hg_realign()
 
-@pe_icp_module.action(name="plasma_off")
-def plasma_off(state: State) -> StepResponse:
-    """
-    Turn off the plasma
-    """
-    state.icp_interface.syn_client.PlasmaOff()
-    return StepResponse.step_succeeded(state.icp_interface.syn_client.Response())
+    @action(name="Plasma_on")
+    def Plasma_on(self) -> ActionResult:
+        """Safely enable the ICP's plasma"""
+        return self.icp.plasma(True)
 
-
-@pe_icp_module.action(name="move_autosampler")
-def move_autosampler(state: State, location: int) -> StepResponse:
-    """
-    Move the autosampler to a specific position
-    """
-    state.icp_interface.syn_client.MoveAutosampler(location)
-    return StepResponse.step_succeeded(state.icp_interface.syn_client.Response())
-
-
-@pe_icp_module.action(name="stop_analysis")
-def stop_analysis(state: State) -> StepResponse:
-    """
-    Stop the analysis
-    """
-    state.icp_interface.syn_client.StopAnalysis()
-    return StepResponse.step_succeeded(state.icp_interface.syn_client.Response())
-
-
-@pe_icp_module.action(name="start_auto_analysis")
-def start_auto_analysis(
-    state: State,
-    method_name: Annotated[str, "The name of the method to use for the analysis"],
-    dataset_name: Annotated[str, "The name of the dataset to store results to"],
-    sample_info_name: Annotated[
-        str, "The name of the sample info file to use for analysis"
-    ],
-    export_template_name: Annotated[
-        str, "The name of the export template file to use for auto-export"
-    ],
-    wavelength_realign: Annotated[
-        int,
-        "When to auto realign the wavelength. 0 for never, 1 for the start of analysis, 2 for the start of each method.",
-    ],
-    precalibrate: Annotated[
-        bool, "Whether to precalibrate the instrument before starting the analysis"
-    ] = False,
-    use_active_method: Annotated[
-        bool,
-        "Whether to use the active method, or load the method specified by 'method_name' (ignored if 'precalibrate' is False)",
-    ] = False,
-    wait_for_completion: Annotated[
-        bool, "Whether to wait for the analysis to complete before returning"
-    ] = True,
-) -> StepResponse:
-    """
-    Start an auto analysis process
-    """
-    icp: ICPInterface = state.icp_interface
-    icp.start_auto_analysis(
-        method_name,
-        dataset_name,
-        sample_info_name,
-        export_template_name,
-        wavelength_realign,
-        precalibrate,
-        use_active_method,
-    )
-    icp.syn_client.GetAnalysisStatus()
-    if wait_for_completion:
-        while icp.analysis_status[0] in [1, 2]:
-            time.sleep(1)
-            icp.syn_client.GetAnalysisStatus()
-    return StepResponse.step_succeeded(state.icp_interface.syn_client.Response())
-
-
-@pe_icp_module.action(name="hg_realign")
-def hg_realign(state: State) -> StepResponse:
-    """
-    Realign the mercury lamp
-    """
-    state.icp_interface.syn_client.HgRealign()
-    return StepResponse.step_succeeded(state.icp_interface.syn_client.Response())
-
-
-@pe_icp_module.action(name="load_sample_info")
-def load_sample_info(
-    state: State,
-    sample_info_file_path: Annotated[
-        str, "The path of the sample info file to load into Syngistix."
-    ],
-) -> StepResponse:
-    """
-    Load a sample info file
-    """
-    state.icp_interface.syn_client.DownloadSampleInfoFile(sample_info_file_path)
-    return StepResponse.step_succeeded(state.icp_interface.syn_client.Response())
-
-
-@pe_icp_module.action(name="load_method")
-def load_method(
-    state: State,
-    method_name: Annotated[str, "The name of the method to load into Syngistix"],
-) -> StepResponse:
-    """
-    Load a method
-    """
-    state.icp_interface.syn_client.LoadMethod(method_name)
-    return StepResponse.step_succeeded(state.icp_interface.syn_client.Response())
-
-
-@pe_icp_module.action(name="start_manual_analysis")
-def start_manual_analysis(
-    state: State,
-    sample_id: Annotated[Optional[str], "The ID of the sample to analyze"] = None,
-    blank_num: Annotated[Optional[int], "The calibration blank number (1-n)"] = None,
-    std_num: Annotated[
-        Optional[int],
-        "The calibration standard number as defined in the Syngistix method (1-n)",
-    ] = None,
-    qc_num: Annotated[
-        Optional[int], "The QC number (1-n) as defined in the Syngistix method"
-    ] = None,
-    wait_for_completion: Annotated[
-        bool, "Whether to wait for the analysis to complete before returning"
-    ] = True,
-) -> StepResponse:
-    """
-    Start a manual analysis process. The type of analysis is determined by the provided parameter. Only one of sample_id, blank_num, std_num, or qc_num should be provided, if multiple are provided, the first one will be used.
-    """
-    icp: ICPInterface = state.icp_interface
-    if sample_id is not None:
-        icp.syn_client.ManualAnalyzeSample(sample_id)
-    elif blank_num is not None:
-        icp.syn_client.ManualAnalyzeBlank(blank_num)
-    elif std_num is not None:
-        icp.syn_client.ManualAnalyzeStd(std_num)
-    elif qc_num is not None:
-        icp.syn_client.ManualAnalyzeQC(qc_num)
-    icp.syn_client.GetAnalysisStatus()
-    if wait_for_completion:
-        while icp.analysis_status[0] in [1, 2]:
-            time.sleep(1)
-            icp.syn_client.GetAnalysisStatus()
-    return StepResponse.step_succeeded(state.icp_interface.syn_client.Response())
-
+    @action(name="Plasma_off")
+    def Plasma_off(self) -> ActionResult:
+        """Safely disable the ICP's plasma"""
+        return self.icp.plasma(False)
 
 """-------------"""
 """Admin Actions"""
 """-------------"""
-
-
-@pe_icp_module.cancel()
-def cancel(state: State) -> StepResponse:
-    """
-    Cancel the current action
-    """
-    state.icp_interface.syn_client.StopAnalysis()
-    state.icp_interface.syn_client.ResetAnalysisSequence()
-    return StepResponse.step_succeeded(state.icp_interface.syn_client.Response())
-
-
-@pe_icp_module.pause()
-@pe_icp_module.safety_stop()
-def stop(state: State) -> StepResponse:
-    """
-    Stop the current action
-    """
-    state.icp_interface.syn_client.StopAnalysis()
-
+def safety_stop(self) -> AdminCommandResponse:
+    # hard stopping current analysis
+    self.icp.hard_stop("Administrative stop")
+    return AdminCommandResponse
 
 if __name__ == "__main__":
-    pe_icp_module.start()
+    icp_node = ICPNode()
+    icp_node.start_node()
