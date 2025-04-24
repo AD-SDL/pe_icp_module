@@ -5,10 +5,12 @@ description = "A node module for controlling Perkins Elmer Syngistix ICP's, such
 authors = [{name = "Ryan D. Lewis", email="ryan.lewis@anl.gov"}]
 # TODO: Add additional dependencies here
 dependencies = [
-    "madsci.node_module>=0.2.0"
+    "madsci.node_module>=0.2.0",
     "pythonnet",
     "pytest",
-    "pandas"
+    "pandas",
+    "keyboard",
+    "psutil"
 ]
 requires-python = ">=3.9.1"
 readme = "README.md"
