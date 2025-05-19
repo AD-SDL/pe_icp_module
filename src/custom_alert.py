@@ -9,7 +9,8 @@ class CustomAlert:  # SMTP server alerts
         self.server = "mailgateway.anl.gov"
         self.port = 25  # Common ports are 587 for TLS and 465 for SSL
         self.instrument = "ICP-AARL200@anl.gov"
-        self.to = "shkrob@anl.gov"  # comma separated list
+        # self.to = "shkrob@anl.gov"  # comma separated list
+        self.to = "ryan.lewis@anl.gov"
 
     def alert(self, subject="ALERT", body=None, importance=None):
         self.message = MIMEMultipart()

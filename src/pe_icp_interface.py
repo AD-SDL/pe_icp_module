@@ -9,6 +9,8 @@ from datetime import datetime
 from glob import glob
 from pathlib import Path
 from tkinter import *
+from typing import Optional
+from madsci.client.event_client import EventClient
 
 # * Using .dlls and .NET assemblies
 # * pip install pythonnet
@@ -86,10 +88,12 @@ class ICPInterface:
         client_ip: str = "146.139.45.9",
         name: str = "Normal run",
         dll_path: str = "C:/Program Files (x86)/PerkinElmer/Syngistix-ICP/SyngistixRemoteControl",
+        logger: Optional[EventClient] = None
     ) -> Self:
         # Logging Configuration
         self.verbose = 1  # verbosity level
         self.smtp = CustomAlert()  # mailer
+        self.logger = logger or EventClient()
 
         # Interface Configuration
         self.dll_path = dll_path  # dll path for remote Syngistix
@@ -354,11 +358,13 @@ class ICPInterface:
     ####################################### status callback #####################################################################
 
     def status_callback(self, status: str):  # Callback function for status"
+        self.logger.log_debug(f"Status Callback: {status=}")
         self.client_status.append(status)
 
     def error_callback(
         self, num: int, msg: str, severity: int
     ):  # Callback function for errors
+        self.logger.log_debug(f"Error Callback: {num=}, {msg=}, {severity=}")
         dt = datetime.now()
         s = datetime.strftime(dt, "%m-%d-%Y %H:%M:%S")
 
@@ -388,14 +394,13 @@ class ICPInterface:
     def analysis_status_callback(
         self, status: int
     ):  # Callback function for analysis status
+        self.logger.log_debug(f"Analysis Status Callback: {status=}")
         self.analysis_status = status
-
-        if self.verbose:
-            print(">> Analysis status = %s" % self.analysis_status)
 
     def analysis_sample_callback(
         self, sampleID: str
     ):  # Callback function for analysis sample
+        self.logger.log_debug(f"Analysis Sample Callback: {sampleID=}")
         if ":" in sampleID:
             self.analysis_sample = sampleID.split(":")[1].strip()
             if self.verbose:
@@ -408,6 +413,7 @@ class ICPInterface:
     def plasma_status_callback(
         self, status: int
     ):  # Callback function for plasma status
+        self.logger.log_debug(f"Plasma Status Callback: {status=}")
         if status == 0:
             self.plasma_status = f"{status}: Plasma is On"
         elif status == 1:
@@ -425,6 +431,7 @@ class ICPInterface:
     def instrument_status_callback(
         self, status: int
     ):  # Callback function for instrument status
+        self.logger.log_debug(f"Instrument Status Callback: {status=}")
         self.instrument_status = (
             f"{status}: {self.RemoteSyngistix.InstrumentStatus(status).ToString()}"
         )
@@ -435,6 +442,7 @@ class ICPInterface:
     def autosampler_status_callback(
         self, status: int
     ):  # Callback function for autosampler status"""
+        self.logger.log_debug(f"Autosampler Status Callback: {status=}")
         self.autosampler_status = (
             f"{status}: {self.RemoteSyngistix.InstrumentStatus(status).ToString()}"
         )
@@ -445,7 +453,8 @@ class ICPInterface:
     def connection_status_callback(
         self, status: int
     ):  # Callback function for connection status
-        self.connection_status = status == 1
+        self.logger.log_debug(f"Connection Status Callback: {status=}")
+        self.connection_status = (status == 1)
 
     ####################################### ICP auto analysis #######################################################
 
@@ -665,6 +674,7 @@ class ICPInterface:
                 else:
                     if self.verbose:
                         print("\n>> Plasma is on, stable")
+                    # time.sleep(900)
                     return 1
         else:
             if status != "Off":
@@ -1142,7 +1152,7 @@ class ICPInterface:
     def save_results(self, opt=1):  # save json and log records and (optionally) results
         self.to_json()
         self.log_record()
-        if self.num_analyzed > 1 and opt:
+        if self.num_analyzed >= 1 and opt:
             self.export(self.last_dataset, self.last_template)
             self.convert_report("")
             self.copy2exp(self.exp)

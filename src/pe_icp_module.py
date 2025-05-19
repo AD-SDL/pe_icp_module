@@ -43,8 +43,9 @@ class ICPNode(RestNode):
         self.icp = ICPInterface(
             server_ip=self.config.server_ip,
             client_ip=self.config.client_ip,
-            name=self.node_definition.name,
+            name=self.node_definition.node_name,
             dll_path=self.config.dll_path,
+            logger=self.logger,
         )
 
     def shutdown_handler(self) -> None:
@@ -54,19 +55,15 @@ class ICPNode(RestNode):
     def state_handler(self) -> None:
         """Called periodically to update the state published by the node"""
         if self.icp is not None:
-            if self.node_status.ready:
-                self.icp.syn_client.GetPlasmaStatus()
-                self.icp.syn_client.GetInstrumentStatus()
-                self.icp.syn_client.GetAnalysisStatus()
-                self.node_state = {
-                    "instrument_error": str(self.icp.instrument_error),
-                    "last_updated": str(datetime.now()),
-                    "instrument_status": self.icp.instrument_status,
-                    "plasma_status": self.icp.plasma_status,
-                    "analysis_status": self.icp.analysis_status,
-                    "autosampler_status": self.icp.autosampler_status,
-                    "connection_status": self.icp.connection_status,
-                }
+            self.node_state = {
+                "instrument_error": str(self.icp.instrument_error),
+                "last_updated": str(datetime.now()),
+                "instrument_status": self.icp.instrument_status,
+                "plasma_status": self.icp.plasma_status,
+                "analysis_status": self.icp.analysis_status,
+                "autosampler_status": self.icp.autosampler_status,
+                "connection_status": self.icp.connection_status,
+            }
 
     @action
     def start_auto_analysis_on_container(
