@@ -152,6 +152,7 @@ class ICPInterface:
                 wavelenghtRealign=wavelength_realign,
             )
 
+
 if __name__ == "__main__":
     # * Example usage
     icp = ICPInterface("192.168.4.32", "192.168.4.32", "Test from Python")
