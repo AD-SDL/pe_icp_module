@@ -6,14 +6,13 @@ import time
 from pathlib import Path
 from typing import Optional
 
+from pe_icp_interface import ICPInterface
 from starlette.datastructures import State
 from typing_extensions import Annotated
 from wei.modules.rest_module import RESTModule
 from wei.types.module_types import ModuleState
 from wei.types.step_types import StepResponse
 from wei.utils import extract_version
-
-from pe_icp_interface import ICPInterface
 
 pe_icp_module = RESTModule(
     name="pe_icp_module",
